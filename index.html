@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Chat UI</title>
+    <script>
+      // Apply saved theme before the app mounts to avoid FOUC
+      try {
+        const saved = localStorage.getItem('theme');
+        const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = saved ? saved === 'dark' : systemDark;
+        document.documentElement.classList.toggle('dark', isDark);
+        // Also set on body to cover any body-scoped dark selectors
+        document.addEventListener('DOMContentLoaded', () => {
+          document.body?.classList.toggle('dark', isDark);
+        });
+      } catch (_) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
