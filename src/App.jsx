@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { api, setToken } from './lib/api.js'
+import { createSocket } from './lib/socket.js'
 import TextareaAutosize from 'react-textarea-autosize'
 import { PaperAirplaneIcon, PaperClipIcon, PhotoIcon, VideoCameraIcon, FaceSmileIcon, MagnifyingGlassIcon, PlusIcon, PhoneIcon, EllipsisHorizontalIcon, ChevronLeftIcon, ChevronRightIcon, XMarkIcon, MicrophoneIcon, ComputerDesktopIcon, Cog6ToothIcon, UserGroupIcon, BellSlashIcon, ArchiveBoxIcon, PencilIcon, TrashIcon, ArrowRightOnRectangleIcon, BookmarkIcon, SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 import { CheckIcon } from '@heroicons/react/24/solid'
@@ -80,8 +82,7 @@ function useMockData() {
   return { conversations, selectedId, setSelectedId, selected, sendMessage, addConversation }
 }
 
-const Sidebar = React.forwardRef(function Sidebar({ conversations, selectedId, onSelect, onNewChat, searchRef, themeState }, ref) {
-  const [theme, cycleTheme] = themeState || []
+const Sidebar = React.forwardRef(function Sidebar({ conversations, selectedId, onSelect, onNewChat, searchRef, theme, onToggleTheme }, ref) {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState('all')
   const filtered = conversations.filter(c =>
@@ -118,9 +119,9 @@ const Sidebar = React.forwardRef(function Sidebar({ conversations, selectedId, o
       ref={ref}
       tabIndex={0}
       onKeyDown={handleKey}
-      className="h-full w-80 shrink-0 border-r border-zinc-200 dark:border-zinc-800 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+      className="h-full w-80 shrink-0 border-r border-[var(--border)] flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
     >
-      <div className="p-4 flex items-center gap-2 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="p-4 flex items-center gap-2 border-b border-[var(--border)]">
         <div className="flex-1 relative">
           <MagnifyingGlassIcon className="w-5 h-5 absolute left-3 top-2.5 text-zinc-400" />
           <input
@@ -131,11 +132,19 @@ const Sidebar = React.forwardRef(function Sidebar({ conversations, selectedId, o
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {theme && (
-          <button className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900" title={`Theme: ${theme === 'dark' ? 'Dark' : 'Light'}`} onClick={() => cycleTheme?.()}>
-            {theme === 'dark' ? <MoonIcon className="w-5 h-5" /> : <SunIcon className="w-5 h-5" />}
-          </button>
-        )}
+        <button
+          className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          onClick={onToggleTheme}
+          aria-label="Toggle theme"
+        >
+          {theme === 'dark' ? (
+            <SunIcon className="w-5 h-5" />
+          ) : (
+            <MoonIcon className="w-5 h-5" />
+          )}
+        </button>
+
         <button className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 active:bg-indigo-700" title="New chat" onClick={() => onNewChat?.()}>
           <PlusIcon className="w-5 h-5" />
         </button>
@@ -173,8 +182,7 @@ const Sidebar = React.forwardRef(function Sidebar({ conversations, selectedId, o
   )
 })
 
-function ChatHeader({ convo, onStartCall, onFocusSearch, onOpenMembers, onBack, themeState }) {
-  const [theme, cycleTheme] = themeState || []
+function ChatHeader({ convo, onStartCall, onFocusSearch, onOpenMembers, onBack }) {
   const [openMenu, setOpenMenu] = useState(false)
   const menuRef = useRef(null)
   const btnRef = useRef(null)
@@ -197,7 +205,7 @@ function ChatHeader({ convo, onStartCall, onFocusSearch, onOpenMembers, onBack, 
   }, [openMenu])
 
   return (
-    <div className="h-16 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between px-2 md:px-4 relative">
+    <div className="h-16 border-b border-[var(--border)] flex items-center justify-between px-2 md:px-4 relative">
       <div className="flex items-center gap-2 md:gap-3">
         {onBack && (
           <button className="md:hidden p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900" onClick={onBack} aria-label="Back">
@@ -211,15 +219,6 @@ function ChatHeader({ convo, onStartCall, onFocusSearch, onOpenMembers, onBack, 
         </div>
       </div>
       <div className="flex items-center gap-1 md:gap-2">
-        {theme && (
-          <button
-            className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"
-            title={`Theme: ${theme === 'dark' ? 'Dark' : 'Light'}`}
-            onClick={() => cycleTheme?.()}
-          >
-            {theme === 'dark' ? <MoonIcon className="w-5 h-5" /> : <SunIcon className="w-5 h-5" />}
-          </button>
-        )}
         <button
           className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900"
           title={convo.type === 'group' ? 'View members' : 'View participant'}
@@ -231,17 +230,17 @@ function ChatHeader({ convo, onStartCall, onFocusSearch, onOpenMembers, onBack, 
         <button className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900" title="Call" onClick={onStartCall}><PhoneIcon className="w-5 h-5" /></button>
         <button ref={btnRef} className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900" title="More" onClick={() => setOpenMenu(v => !v)}><EllipsisHorizontalIcon className="w-6 h-6" /></button>
         {openMenu && (
-          <div ref={menuRef} className="absolute right-2 top-14 w-56 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-xl overflow-hidden">
+          <div ref={menuRef} className="absolute right-2 top-14 w-56 rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-xl overflow-hidden">
             <div className="py-1 text-sm">
               <button className="w-full px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis" onClick={() => { setOpenMenu(false); onOpenMembers?.() }}><UserGroupIcon className="w-4 h-4"/> <span className="truncate">View members</span></button>
               <button className="w-full px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis" onClick={() => setOpenMenu(false)}><BellSlashIcon className="w-4 h-4"/> <span className="truncate">Mute notifications</span></button>
               <button className="w-full px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis" onClick={() => { setOpenMenu(false); onFocusSearch?.() }}><MagnifyingGlassIcon className="w-4 h-4"/> <span className="truncate">Search in conversation</span></button>
             </div>
-            <div className="py-1 text-sm border-t border-zinc-200 dark:border-zinc-800">
+            <div className="py-1 text-sm border-t border-[var(--border)]">
               <button className="w-full px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis" onClick={() => setOpenMenu(false)}><BookmarkIcon className="w-4 h-4"/> <span className="truncate">Pin conversation</span></button>
               <button className="w-full px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis" onClick={() => setOpenMenu(false)}><ArchiveBoxIcon className="w-4 h-4"/> <span className="truncate">Archive</span></button>
             </div>
-            <div className="py-1 text-sm border-t border-zinc-200 dark:border-zinc-800">
+            <div className="py-1 text-sm border-t border-[var(--border)]">
               {convo.type === 'group' ? (
                 <button className="w-full px-3 py-2 hover:bg-zinc-100 dark:hover:bg-zinc-900 flex items-center gap-2 whitespace-nowrap overflow-hidden text-ellipsis" onClick={() => setOpenMenu(false)}><ArrowRightOnRectangleIcon className="w-4 h-4"/> <span className="truncate">Leave group</span></button>
               ) : (
@@ -386,8 +385,8 @@ function AddContactModal({ open, onClose, onAdd }) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-2xl bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="h-14 flex items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="w-full max-w-2xl rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="h-14 flex items-center justify-between px-4 border-b border-[var(--border)]">
           <div className="font-semibold">Add contact</div>
           <div className="flex items-center gap-1 text-sm">
             <button className={(tab === 'scan' ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-900') + ' px-3 py-1 rounded-full'} onClick={() => setTab('scan')}>Scan QR</button>
@@ -491,7 +490,7 @@ function MessageBubble({ message, isMe, sender, onOpenGallery }) {
         )}
         {message.type === 'file' && (
           <a
-            href={message.file?.url || '#'}
+            href={message.file?.url || '#'} 
             download={message.file?.name || true}
             className="flex items-center gap-3"
             rel="noreferrer"
@@ -595,7 +594,8 @@ function CallOverlay({ open, convo, onClose }) {
                 <div className="px-2 py-1 rounded-md bg-black/50 text-sm">
                   {p.name}
                 </div>
-                <div className={"h-2 w-12 rounded-full transition " + (p.speaking ? 'bg-emerald-400' : 'bg-white/30')}></div>
+                <div className={"h-2 w-12 rounded-full transition " + (p.speaking ? 'bg-emerald-400' : 'bg-white/30')}>
+                </div>
               </div>
               <div className="pb-[56.25%]" />
             </div>
@@ -664,8 +664,8 @@ function MembersPanel({ open, convo, onClose, mobile = false }) {
 
   return (
     <div className="fixed inset-0 z-40 bg-black/30">
-      <aside ref={panelRef} className={"absolute top-0 h-full bg-white dark:bg-zinc-950 border-zinc-200 dark:border-zinc-800 shadow-2xl flex flex-col " + (mobile ? 'left-0 right-0 border-t md:border-l' : 'right-0 w-[360px] max-w-[90vw] border-l')}>
-        <div className="h-14 flex items-center justify-between px-4 border-b border-zinc-200 dark:border-zinc-800">
+      <aside ref={panelRef} className={"absolute top-0 h-full bg-[var(--surface)] border-[var(--border)] shadow-2xl flex flex-col " + (mobile ? 'left-0 right-0 border-t md:border-l' : 'right-0 w-[360px] max-w-[90vw] border-l')}>
+        <div className="h-14 flex items-center justify-between px-4 border-b border-[var(--border)]">
           <div className="font-semibold">{title}</div>
           <button className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900" onClick={onClose}>
             <XMarkIcon className="w-6 h-6" />
@@ -775,7 +775,7 @@ function Composer({ onSend, inputRef }) {
   }
 
   return (
-    <div className="border-t border-zinc-200 dark:border-zinc-800 p-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}>
+    <div className="border-t border-[var(--border)] p-3" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 0px)' }}>
       {files.length > 0 && (
         <div className="flex gap-2 flex-wrap mb-2">
           {files.map((item, i) => (
@@ -840,8 +840,133 @@ function Composer({ onSend, inputRef }) {
   )
 }
 
+function useBackendData() {
+  const [ready, setReady] = useState(false)
+  const [meId, setMeId] = useState(null)
+  const [conversations, setConversations] = useState([])
+  const [selectedId, setSelectedId] = useState(null)
+  const socketRef = useRef(null)
+
+  // initialize: auto-provision demo user and load rooms
+  useEffect(() => {
+    if (!api.url) return
+    let cancelled = false
+    const init = async () => {
+      try {
+        const existing = localStorage.getItem('auth.demo.v1')
+        let email, password
+        if (existing) {
+          const obj = JSON.parse(existing)
+          email = obj.email; password = obj.password
+        } else {
+          email = `demo_${Math.random().toString(36).slice(2, 8)}@example.com`
+          password = 'password'
+          try {
+            const s = await api.signup(email, password)
+            setToken(s.token)
+            if (s.user?.id) {
+              setMeId(s.user.id)
+              try { localStorage.setItem('auth.me.v1', s.user.id) } catch {}
+            }
+          } catch (_) {
+            // ignore
+          }
+          localStorage.setItem('auth.demo.v1', JSON.stringify({ email, password }))
+        }
+        let token = localStorage.getItem('auth.token.v1')
+        if (!token) {
+          const l = await api.login(email, password)
+          setToken(l.token)
+          token = l.token
+          if (l.user?.id) {
+            setMeId(l.user.id)
+            try { localStorage.setItem('auth.me.v1', l.user.id) } catch {}
+          }
+        }
+        if (!meId) {
+          // Try restore meId from storage or from token payload
+          const storedMe = localStorage.getItem('auth.me.v1')
+          if (storedMe) setMeId(storedMe)
+          else if (token) {
+            try {
+              const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+              if (payload?.sub) setMeId(payload.sub)
+            } catch {}
+          }
+        }
+        // fetch rooms
+        const { rooms } = await api.listRooms()
+        let list = rooms
+        if (!list.length) {
+          const r = await api.createRoom('General')
+          list = [r.room]
+        }
+        // normalize to UI conversations
+        const convos = list.map(r => ({ id: r.id, type: 'group', name: r.name, avatar: `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(r.name)}`, members: [{ id: 'me', name: 'You', avatar: me.avatar }], messages: [] }))
+        if (cancelled) return
+        setConversations(convos)
+        setSelectedId(convos[0]?.id || null)
+        setReady(true)
+      } catch (e) {
+        console.error('Backend init failed', e)
+      }
+    }
+    init()
+    return () => { cancelled = true }
+  }, [])
+
+  // load messages for selected room
+  useEffect(() => {
+    const load = async () => {
+      if (!selectedId) return
+      try {
+        const { messages } = await api.listMessages(selectedId, { limit: 50 })
+        setConversations(prev => prev.map(c => c.id === selectedId ? { ...c, messages: messages.map(m => ({ id: m.id, sender: m.user_id === meId ? 'me' : 'other', type: 'text', text: m.content, ts: Date.parse(m.timestamp) || Date.now() })) } : c))
+      } catch (e) {
+        // ignore
+      }
+    }
+    load()
+  }, [selectedId, meId])
+
+  // socket
+  useEffect(() => {
+    if (!api.url) return
+    const s = createSocket()
+    socketRef.current = s
+    if (selectedId) s?.emit('room:join', selectedId)
+    s?.on('message:new', (m) => {
+      setConversations(prev => prev.map(c => c.id === m.room_id ? { ...c, messages: [...c.messages, { id: m.id, sender: m.user_id === meId ? 'me' : 'other', type: 'text', text: m.content, ts: Date.parse(m.timestamp) || Date.now() }] } : c))
+    })
+    return () => { s?.disconnect() }
+  }, [api.url])
+
+  useEffect(() => {
+    const s = socketRef.current
+    if (!s) return
+    s.emit('room:leave')
+    if (selectedId) s.emit('room:join', selectedId)
+  }, [selectedId])
+
+  const sendMessage = async (roomId, msg) => {
+    if (msg.type !== 'text') return // backend supports text in MVP
+    try {
+      const { message } = await api.sendMessage(roomId, msg.text)
+      setConversations(prev => prev.map(c => c.id === roomId ? { ...c, messages: [...c.messages, { id: message.id, sender: 'me', type: 'text', text: message.content, ts: Date.parse(message.timestamp) || Date.now() }] } : c))
+    } catch (e) {
+      console.error('send failed', e)
+    }
+  }
+
+  const selected = useMemo(() => conversations.find(c => c.id === selectedId), [conversations, selectedId])
+  return { ready, conversations, selectedId, setSelectedId, selected, sendMessage, addConversation: (c) => setConversations(prev => [c, ...prev]) }
+}
+
 export default function App() {
-  const { conversations, selectedId, setSelectedId, selected, sendMessage, addConversation } = useMockData()
+  const usingBackend = Boolean(import.meta.env.VITE_API_URL)
+  const mock = useMockData()
+  const backend = useBackendData()
+  const { conversations, selectedId, setSelectedId, selected, sendMessage, addConversation } = usingBackend && backend.ready ? backend : mock
 
   // Refs for keyboard panel cycling
   const sidebarRef = useRef(null)
@@ -860,24 +985,22 @@ export default function App() {
     return () => mql.removeEventListener?.('change', update)
   }, [])
 
-  // Theme management (two-state: light/dark, with system as default only)
-  const systemDefault = () => (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || systemDefault())
+  // Theme handling: load, apply, and toggle
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('theme')
+      if (saved === 'light' || saved === 'dark') return saved
+    } catch {}
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+    return prefersDark ? 'dark' : 'light'
+  })
   useEffect(() => {
-    const applied = theme
     const root = document.documentElement
-    root.classList.toggle('dark', applied === 'dark')
-    document.body?.classList.toggle('dark', applied === 'dark')
-    const meta = document.querySelector('meta[name="theme-color"]') || (() => { const m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); return m })()
-    meta.setAttribute('content', applied === 'dark' ? '#09090b' : '#fafafa')
+    if (theme === 'dark') root.classList.add('dark')
+    else root.classList.remove('dark')
+    try { localStorage.setItem('theme', theme) } catch {}
   }, [theme])
-  const cycleTheme = () => {
-    setTheme((prev) => {
-      const next = prev === 'dark' ? 'light' : 'dark'
-      localStorage.setItem('theme', next)
-      return next
-    })
-  }
+  const toggleTheme = () => setTheme(t => (t === 'dark' ? 'light' : 'dark'))
 
   const handleSend = (msg) => {
     sendMessage(selectedId, msg)
@@ -955,17 +1078,18 @@ export default function App() {
   }, [conversations, selectedId, setSelectedId])
 
   return (
-    <div className="h-dvh w-full flex bg-white dark:bg-zinc-950">
+    <div className="h-dvh w-full flex">
       {/* Sidebar: full-width on mobile list view; fixed width on md+ */}
       <div className={(isMobile ? (mobileView === 'list' ? 'flex' : 'hidden') : 'flex') + ' md:flex h-full w-full md:w-80 shrink-0'}>
         <Sidebar
           ref={sidebarRef}
           searchRef={sidebarSearchRef}
-          themeState={[theme, cycleTheme]}
           conversations={conversations}
           selectedId={selectedId}
           onSelect={(id) => { setSelectedId(id); if (isMobile) setMobileView('chat') }}
           onNewChat={() => setAddOpen(true)}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
       </div>
 
@@ -979,7 +1103,6 @@ export default function App() {
               onFocusSearch={() => sidebarSearchRef.current?.focus()}
               onOpenMembers={() => setMembersOpen(true)}
               onBack={isMobile ? () => setMobileView('list') : undefined}
-              themeState={[theme, cycleTheme]}
             />
             <MessageList ref={messagesRef} convo={selected} onOpenGallery={openGallery} />
             <Composer inputRef={composerInputRef} onSend={handleSend} />

@@ -6,17 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Chat UI</title>
     <script>
-      // Apply saved theme before the app mounts to avoid FOUC
-      try {
-        const saved = localStorage.getItem('theme');
-        const systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const isDark = saved ? saved === 'dark' : systemDark;
-        document.documentElement.classList.toggle('dark', isDark);
-        // Also set on body to cover any body-scoped dark selectors
-        document.addEventListener('DOMContentLoaded', () => {
-          document.body?.classList.toggle('dark', isDark);
-        });
-      } catch (_) {}
+      // Apply saved or system theme before app mounts to avoid FOUC
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+          var isDark = stored ? stored === 'dark' : prefersDark;
+          if (isDark) document.documentElement.classList.add('dark');
+        } catch (e) { /* no-op */ }
+      })();
     </script>
   </head>
   <body>

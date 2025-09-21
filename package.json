@@ -14,7 +14,8 @@
     "clsx": "^2.1.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-textarea-autosize": "^8.5.9"
+    "react-textarea-autosize": "^8.5.9",
+    "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.35.0",

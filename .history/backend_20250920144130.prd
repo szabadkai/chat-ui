@@ -1,0 +1,115 @@
+
+
+# 🖥️ Backend Architecture (MVP)
+**Hosting:** Railway (Node.js API + Postgres)  
+
+## 1. Core Responsibilities  
+- **Authentication**: Manage user accounts (recommend Firebase Auth for speed, or NextAuth w/ JWT if self-managed).  
+- **Real-time Messaging**: Handle chat-room–based message broadcast via WebSockets (`socket.io`).  
+- **Persistence**: Store users, rooms, and messages in Postgres.  
+- **Push Notifications**: Send push notifications for new messages via Firebase Cloud Messaging (both web + Android).  
+- **REST API Layer**: CRUD endpoints for users, rooms, and messages.  
+
+---
+
+## 2. High-Level Architecture  
+```
+         ┌───────────────────┐
+         │  React Web (Next) │
+         └─────────┬─────────┘
+                   │
+         ┌───────────────────┐
+         │ React Native App  │
+         │ (Android + FCM)   │
+         └─────────┬─────────┘
+                   │   WebSockets (real-time)
+                   ▼
+        ┌──────────────────────────┐
+        │ Node.js Backend (Railway)│
+        │ - Express REST API        │
+        │ - Socket.io (real-time)   │
+        │ - Auth (Firebase/Auth JWT)│
+        │ - Push integration (FCM)  │
+        └──────────┬───────────────┘
+                   │
+         ┌───────────────────────┐
+         │ Postgres (Railway)    │
+         │ - users               │
+         │ - rooms               │
+         │ - messages            │
+         └───────────────────────┘
+```
+
+---
+
+## 3. Backend Tech Stack (Recommended MVP)
+
+- **Runtime**: Node.js 20, deployed on Railway  
+- **Frameworks**: Express (API layer) + socket.io (real-time)  
+- **Database**: Postgres on Railway (managed DB)  
+- **Auth**: Firebase Auth (simplest cross-platform option)  
+- **Notifications**: Firebase Cloud Messaging (FCM)  
+- **Deployment**: CI/CD via GitHub → Railway  
+
+---
+
+## 4. API Endpoints (MVP Set)
+
+### Auth  
+- `POST /auth/signup` – create new account  
+- `POST /auth/login` – authenticate (JWT returned if not Firebase)  
+
+### Rooms  
+- `POST /rooms` – create room  
+- `GET /rooms` – list rooms  
+- `GET /rooms/:id` – get room details + messages  
+
+### Messages  
+- `POST /rooms/:id/messages` – send message  
+- `GET /rooms/:id/messages` – fetch last N messages  
+
+---
+
+## 5. Data Model
+
+**Users**  
+- `id` (UUID, PK)  
+- `email` (unique)  
+- `password_hash` (if not Firebase)  
+- `fcm_token` (for push notifications, nullable)  
+- `created_at`  
+
+**Rooms**  
+- `id` (UUID, PK)  
+- `name` (varchar)  
+- `created_by` (FK → users.id)  
+- `created_at`  
+
+**Messages**  
+- `id` (UUID, PK)  
+- `room_id` (FK → rooms.id)  
+- `user_id` (FK → users.id)  
+- `content` (text)  
+- `timestamp` (UTC)  
+
+---
+
+## 6. Push Notification Flow  
+1. User logs in → frontend registers device/browser push token → sent to backend → stored in DB.  
+2. When a new message is posted:  
+   - Message written to DB.  
+   - Broadcasted via WebSockets to all connected clients in that room.  
+   - Backend sends FCM push notification to all **offline/inactive devices** in that room.  
+
+---
+
+## 7. Scaling Considerations (Post-MVP)  
+- Move Socket.io into Redis-backed pub/sub for horizontal scaling.  
+- Add message delivery acknowledgments.  
+- Introduce rate-limiting / abuse prevention on APIs.  
+- Event-driven queue (e.g. Kafka or RabbitMQ) for decoupling push notifications from request cycle.  
+
+---
+
+⚡ In short: **One backend service on Railway** handles everything in MVP: API + WebSockets + Push + DB.  
+Later, notifications and real-time messaging could be split into services for scale.  
